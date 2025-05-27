@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>3D Solar System with Moon, Stars, and Planet Rings</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background-color: #000;
+    color: white;
+    font-family: Arial, sans-serif;
+  }
+  #info {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background: rgba(0,0,0,0.5);
+    padding: 10px 20px;
+    border-radius: 8px;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="info">Click planets to see names. Drag to rotate, scroll to zoom.</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+<script>
+  const scene = new THREE.Scene();
+
+  // Starry background
+  function createStarField() {
+    const starsGeometry = new THREE.BufferGeometry();
+    const starCount = 10000;
+    const positions = [];
+    for (let i = 0; i < starCount; i++) {
+      const x = (Math.random() - 0.5) * 2000;
+      const y = (Math.random() - 0.5) * 2000;
+      const z = (Math.random() - 0.5) * 2000;
+      positions.push(x, y, z);
+    }
+    starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    const starsMaterial = new THREE.PointsMaterial({ color: 0xffffff, size: 0.7 });
+    const stars = new THREE.Points(starsGeometry, starsMaterial);
+    scene.add(stars);
+  }
+  createStarField();
+
+  const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 5000);
+  camera.position.set(0, 150, 400);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.05;
+  controls.minDistance = 50;
+  controls.maxDistance = 1500;
+
+  const ambientLight = new THREE.AmbientLight(0x222222);
+  scene.add(ambientLight);
+
+  const sunGeometry = new THREE.SphereGeometry(16, 32, 32);
+  const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
+  const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+  scene.add(sun);
+
+  const sunLight = new THREE.PointLight(0xffffff, 2.5, 2000);
+  sunLight.position.set(0, 0, 0);
+  scene.add(sunLight);
+
+  const planetData = [
+    ['Mercury', 3.2, 28, 0.04, 0xbebebe, []],
+    ['Venus', 5.8, 44, 0.015, 0xeccc9a, []],
+    ['Earth', 6, 62, 0.01, 0x2e62f6, [
+      {name: 'Moon', size: 1.6, distance: 10, orbitSpeed: 0.04, color: 0x888888}
+    ]],
+    ['Mars', 4, 78, 0.008, 0xff4500, []],
+    ['Jupiter', 12, 100, 0.002, 0xd4a45d, [], { ringInnerRadius: 14, ringOuterRadius: 20, ringColor: 0xaaaaaa }],
+    ['Saturn', 10, 138, 0.0018, 0xe6d699, [], { ringInnerRadius: 12, ringOuterRadius: 22, ringColor: 0xffd27f }],
+    ['Uranus', 7, 176, 0.0015, 0x88ccee, [], { ringInnerRadius: 8, ringOuterRadius: 14, ringColor: 0x99ccff }],
+    ['Neptune', 7, 200, 0.0012, 0x3f6ad8, [], { ringInnerRadius: 8, ringOuterRadius: 14, ringColor: 0x6666ff }],
+  ];
+
+  const planets = [];
+  const orbits = [];
+
+  function createOrbitRing(radius) {
+    const geometry = new THREE.RingGeometry(radius - 0.2, radius + 0.2, 64);
+    const material = new THREE.MeshBasicMaterial({ color: 0x444444, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.x = Math.PI / 2;
+    return ring;
+  }
+
+  // Create ring for planets with rings
+  function createPlanetRing(innerRadius, outerRadius, color) {
+    const geometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
+    const material = new THREE.MeshBasicMaterial({
+      color: color,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.128
+    });
+    const ring = new THREE.Mesh(geometry, material);
+    ring.rotation.x = Math.PI / 2;
+    return ring;
+  }
+
+  planetData.forEach(([name, size, distance, orbitSpeed, color, moons, ring]) => {
+    const orbit = createOrbitRing(distance);
+    scene.add(orbit);
+    orbits.push(orbit);
+
+    const geometry = new THREE.SphereGeometry(size, 32, 32);
+    const material = new THREE.MeshStandardMaterial({ color, roughness: 1 });
+    const planet = new THREE.Mesh(geometry, material);
+
+    planet.userData = {
+      name,
+      distance,
+      orbitSpeed,
+      angle: Math.random() * Math.PI * 2,
+      size,
+      moons: [],
+    };
+
+    planet.position.set(distance, 0, 0);
+    scene.add(planet);
+
+    // Add moons
+    moons.forEach(moonData => {
+      const [moonName, moonSize, moonDistance, moonOrbitSpeed, moonColor] = [moonData.name, moonData.size, moonData.distance, moonData.orbitSpeed, moonData.color];
+      const moonGeometry = new THREE.SphereGeometry(moonSize, 32, 32);
+      const moonMaterial = new THREE.MeshStandardMaterial({ color: moonColor, roughness: 1 });
+      const moon = new THREE.Mesh(moonGeometry, moonMaterial);
+
+      const moonOrbit = createOrbitRing(moonDistance);
+      moonOrbit.rotation.x = Math.PI / 2;
+      planet.add(moonOrbit);
+
+      moon.userData = {
+        name: moonName,
+        distance: moonDistance,
+        orbitSpeed: moonOrbitSpeed,
+        angle: Math.random() * Math.PI * 2,
+        size: moonSize,
+      };
+
+      moon.position.set(moonDistance, 0, 0);
+      planet.add(moon);
+      planet.userData.moons.push(moon);
+    });
+
+    // Add rings for planets that have them
+    if (ring) {
+      const planetRing = createPlanetRing(ring.ringInnerRadius, ring.ringOuterRadius, ring.ringColor);
+      planet.add(planetRing);
+    }
+
+    planets.push(planet);
+  });
+
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+
+  const info = document.getElementById('info');
+
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth/window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  window.addEventListener('click', (event) => {
+    mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = - (event.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    const objectsToTest = [];
+    planets.forEach(planet => {
+      objectsToTest.push(planet);
+      planet.userData.moons.forEach(moon => objectsToTest.push(moon));
+    });
+
+    const intersects = raycaster.intersectObjects(objectsToTest);
+
+    if (intersects.length > 0) {
+      const obj = intersects[0].object;
+      info.textContent = 'Clicked: ' + obj.userData.name;
+    } else {
+      info.textContent = 'Click planets to see names. Drag to rotate, scroll to zoom.';
+    }
+  });
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    sun.rotation.y += 0.001;
+
+    planets.forEach(planet => {
+      planet.userData.angle += planet.userData.orbitSpeed;
+      const x = Math.cos(planet.userData.angle) * planet.userData.distance;
+      const z = Math.sin(planet.userData.angle) * planet.userData.distance;
+      planet.position.set(x, 0, z);
+
+      planet.rotation.y += 0.005;
+
+      planet.userData.moons.forEach(moon => {
+        moon.userData.angle += moon.userData.orbitSpeed;
+        const mx = Math.cos(moon.userData.angle) * moon.userData.distance;
+        const mz = Math.sin(moon.userData.angle) * moon.userData.distance;
+        moon.position.set(mx, 0, mz);
+        moon.rotation.y += 0.01;
+      });
+    });
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  animate();
+</script>
+</body>
+</html>
